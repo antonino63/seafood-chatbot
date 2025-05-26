@@ -6,12 +6,9 @@ from flask import Blueprint, request, jsonify
 chat_bp = Blueprint('chat', __name__)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-SYSTEM_PROMPT = (
-    "Agisci come un assistente che riceve ordini di pesce da ristoratori campani. "
-    "Fai domande per ottenere: nome del cliente, cosa vuole ordinare (quantità e prodotto), "
-    "e quando desidera riceverlo. Non confermare l'ordine finché mancano dati. "
-    "Rispondi in modo amichevole ma professionale, come un esperto di pescheria."
-)
+# Caricamento del system prompt dal file
+with open("system_prompt.txt", "r", encoding="utf-8") as f:
+    SYSTEM_PROMPT = f.read()
 
 @chat_bp.route("/chat", methods=["POST"])
 def chat():
@@ -31,7 +28,13 @@ def chat():
 
         reply = response.choices[0].message["content"]
 
-        order_complete = any(x in reply.lower() for x in ["grazie per l'ordine", "ricevuto", "conferma", "è tutto", "consegna"])
+        # Verifica rudimentale: presenza dei campi essenziali
+        conversation_text = " ".join([m["content"] for m in messages if m["role"] != "system"]).lower()
+
+        has_customer = any(x in conversation_text for x in ["ristorante", "cliente", "osteria", "trattoria", "bersagliera", "donato"])
+        has_date = any(x in conversation_text for x in ["oggi", "domani", "dopodomani", "alle", "ore", "stasera", "questa sera", "mattina", "pomeriggio"])
+
+        order_complete = has_customer and has_date
 
         return jsonify({
             "response_text": reply,
