@@ -6,19 +6,19 @@ from flask import Blueprint, request, jsonify
 chat_bp = Blueprint('chat', __name__)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Prompt caricabile da file
+# Prompt da file + istruzioni su formato JSON
 with open("system_prompt.txt", "r", encoding="utf-8") as f:
     SYSTEM_PROMPT = f.read()
 
 INSTRUCTIONS = (
-    "\nRispondi con un JSON nel formato:\n"
+    "\nRispondi SOLO con un JSON nel formato:\n"
     "{\n"
     "  \"customer_name\": string or null,\n"
     "  \"order_items\": [ { \"product\": string, \"quantity\": number } ] or null,\n"
     "  \"delivery_time\": string or null,\n"
     "  \"message\": risposta naturale e cordiale al cliente (ma non inventare o proporre)\n"
     "}\n"
-    "Se i dati non sono completi, inserisci null nei campi mancanti. Non inventare prodotti."
+    "Non aggiungere spiegazioni, saluti, testo prima o dopo il JSON."
 )
 
 @chat_bp.route("/chat", methods=["POST"])
@@ -39,15 +39,17 @@ def chat():
 
         raw_reply = response.choices[0].message["content"]
 
-        # Estrai il JSON dalla risposta
-        parsed_json = None
+        # Tentativo parsing JSON
         try:
             start = raw_reply.find("{")
             end = raw_reply.rfind("}") + 1
             json_part = raw_reply[start:end]
             parsed_json = json.loads(json_part)
-        except Exception:
-            return jsonify({"error": "Risposta non strutturata correttamente", "raw": raw_reply}), 500
+        except Exception as ex:
+            return jsonify({
+                "error": "Risposta non strutturata correttamente",
+                "raw": raw_reply
+            }), 500
 
         customer_ok = parsed_json.get("customer_name") not in [None, "", "null"]
         date_ok = parsed_json.get("delivery_time") not in [None, "", "null"]
@@ -64,4 +66,7 @@ def chat():
         })
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({
+            "error": str(e),
+            "trace": repr(e)
+        }), 500
