@@ -6,9 +6,20 @@ from flask import Blueprint, request, jsonify
 chat_bp = Blueprint('chat', __name__)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Caricamento del system prompt dal file
+# Prompt caricabile da file
 with open("system_prompt.txt", "r", encoding="utf-8") as f:
     SYSTEM_PROMPT = f.read()
+
+INSTRUCTIONS = (
+    "\nRispondi con un JSON nel formato:\n"
+    "{\n"
+    "  \"customer_name\": string or null,\n"
+    "  \"order_items\": [ { \"product\": string, \"quantity\": number } ] or null,\n"
+    "  \"delivery_time\": string or null,\n"
+    "  \"message\": risposta naturale e cordiale al cliente (ma non inventare o proporre)\n"
+    "}\n"
+    "Se i dati non sono completi, inserisci null nei campi mancanti. Non inventare prodotti."
+)
 
 @chat_bp.route("/chat", methods=["POST"])
 def chat():
@@ -17,7 +28,7 @@ def chat():
         message = data.get("message", "")
         history = data.get("history", [])
 
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history + [
+        messages = [{"role": "system", "content": SYSTEM_PROMPT + INSTRUCTIONS}] + history + [
             {"role": "user", "content": message}
         ]
 
@@ -26,20 +37,30 @@ def chat():
             messages=messages
         )
 
-        reply = response.choices[0].message["content"]
+        raw_reply = response.choices[0].message["content"]
 
-        # Verifica rudimentale: presenza dei campi essenziali
-        conversation_text = " ".join([m["content"] for m in messages if m["role"] != "system"]).lower()
+        # Estrai il JSON dalla risposta
+        parsed_json = None
+        try:
+            start = raw_reply.find("{")
+            end = raw_reply.rfind("}") + 1
+            json_part = raw_reply[start:end]
+            parsed_json = json.loads(json_part)
+        except Exception:
+            return jsonify({"error": "Risposta non strutturata correttamente", "raw": raw_reply}), 500
 
-        has_customer = any(x in conversation_text for x in ["ristorante", "cliente", "osteria", "trattoria", "bersagliera", "donato"])
-        has_date = any(x in conversation_text for x in ["oggi", "domani", "dopodomani", "alle", "ore", "stasera", "questa sera", "mattina", "pomeriggio"])
+        customer_ok = parsed_json.get("customer_name") not in [None, "", "null"]
+        date_ok = parsed_json.get("delivery_time") not in [None, "", "null"]
 
-        order_complete = has_customer and has_date
+        order_complete = customer_ok and date_ok
 
         return jsonify({
-            "response_text": reply,
+            "response_text": parsed_json.get("message", "[nessuna risposta]"),
             "order_complete": order_complete,
-            "history": messages + [{"role": "assistant", "content": reply}]
+            "customer_name": parsed_json.get("customer_name"),
+            "delivery_time": parsed_json.get("delivery_time"),
+            "order_items": parsed_json.get("order_items", []),
+            "history": messages + [{"role": "assistant", "content": raw_reply}]
         })
 
     except Exception as e:
