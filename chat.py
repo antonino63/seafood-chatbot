@@ -70,3 +70,9 @@ def chat():
             "error": str(e),
             "trace": repr(e)
         }), 500
+
+@chat_bp.route("/debug-prompt", methods=["GET"])
+def debug_prompt():
+    return jsonify({
+        "system_prompt": SYSTEM_PROMPT[:500] + "..."  # Mostra solo i primi 500 caratteri per sicurezza
+    })
