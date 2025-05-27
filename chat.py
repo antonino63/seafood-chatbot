@@ -1,3 +1,4 @@
+
 import os
 import json
 from flask import Blueprint, request, jsonify
@@ -71,7 +72,11 @@ def chat():
             json_part = raw_reply[start:end]
             parsed = json.loads(json_part)
         except Exception:
-            return jsonify({"error": "Risposta non strutturata correttamente", "raw": raw_reply}), 500
+            return jsonify({
+                "response_text": raw_reply.strip() or "[nessuna risposta]",
+                "raw": raw_reply,
+                "error": "Risposta non JSON, fallback attivato"
+            }), 200
 
         if parsed.get("customer_name"):
             order_state["customer_name"] = parsed["customer_name"]
