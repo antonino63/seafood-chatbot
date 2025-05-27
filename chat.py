@@ -10,11 +10,11 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 with open("system_prompt.txt", "r", encoding="utf-8") as f:
     SYSTEM_PROMPT = f.read()
 
-# Istruzioni forti
+# Istruzioni rigide + contesto dinamico
 INSTRUCTIONS = (
-    "\n\n🔒 Rispondi SOLO con un JSON nel formato esatto seguente. "
-    "NON aggiungere saluti, spiegazioni o testo prima o dopo. "
-    "Usa solo i campi richiesti, anche se incompleti. Se un dato non è presente, metti null.\n"
+    "\n\n🔒 Rispondi SOLO con un JSON nel formato seguente. "
+    "NON aggiungere saluti o testo fuori. "
+    "Se un dato non è presente, metti null.\n"
     "{\n"
     "  \"customer_name\": string or null,\n"
     "  \"order_items\": [ { \"product\": string, \"quantity\": number } ] or null,\n"
@@ -29,9 +29,17 @@ def chat():
         data = request.get_json()
         message = data.get("message", "")
         history = data.get("history", [])
+        order_state = data.get("order_state", {
+            "customer_name": None,
+            "delivery_time": None,
+            "order_items": []
+        })
+
+        # Costruzione prompt dinamico di contesto
+        order_context = f"\n\nOrdine finora raccolto:\nCliente: {order_state['customer_name']}\nConsegna: {order_state['delivery_time']}\nProdotti: {order_state['order_items']}"
 
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT + INSTRUCTIONS}
+            {"role": "system", "content": SYSTEM_PROMPT + INSTRUCTIONS + order_context}
         ] + history + [
             {"role": "user", "content": message}
         ]
@@ -55,17 +63,29 @@ def chat():
                 "raw": raw_reply
             }), 500
 
+        # Stato aggiornato
+        if parsed.get("customer_name"):
+            order_state["customer_name"] = parsed["customer_name"]
+
+        if parsed.get("delivery_time"):
+            order_state["delivery_time"] = parsed["delivery_time"]
+
+        if parsed.get("order_items"):
+            order_state["order_items"] += parsed["order_items"]
+
         order_complete = all([
-            parsed.get("customer_name"),
-            parsed.get("delivery_time")
+            order_state.get("customer_name"),
+            order_state.get("delivery_time"),
+            order_state.get("order_items")
         ])
 
         return jsonify({
             "response_text": parsed.get("message", "[nessuna risposta]"),
             "order_complete": order_complete,
-            "customer_name": parsed.get("customer_name"),
-            "delivery_time": parsed.get("delivery_time"),
-            "order_items": parsed.get("order_items", []),
+            "customer_name": order_state.get("customer_name"),
+            "delivery_time": order_state.get("delivery_time"),
+            "order_items": order_state.get("order_items", []),
+            "order_state": order_state,
             "history": messages + [{"role": "assistant", "content": raw_reply}]
         })
 
@@ -73,7 +93,6 @@ def chat():
         return jsonify({"error": str(e)}), 500
 
 
-# Endpoint di debug prompt
 @chat_bp.route("/debug-prompt", methods=["GET"])
 def debug_prompt():
     return jsonify({
