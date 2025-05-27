@@ -10,7 +10,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 with open("system_prompt.txt", "r", encoding="utf-8") as f:
     SYSTEM_PROMPT = f.read()
 
-# Istruzioni rigide + contesto dinamico
+# Istruzioni e contesto
 INSTRUCTIONS = (
     "\n\n🔒 Rispondi SOLO con un JSON nel formato seguente. "
     "NON aggiungere saluti o testo fuori. "
@@ -21,6 +21,7 @@ INSTRUCTIONS = (
     "  \"delivery_time\": string or null,\n"
     "  \"message\": string\n"
     "}\n"
+    "Quando tutti i dati sono presenti, puoi dire che l'ordine è registrato, ma resta disponibile per ulteriori richieste."
 )
 
 @chat_bp.route("/chat", methods=["POST"])
@@ -35,8 +36,8 @@ def chat():
             "order_items": []
         })
 
-        # Costruzione prompt dinamico di contesto
-        order_context = f"\n\nOrdine finora raccolto:\nCliente: {order_state['customer_name']}\nConsegna: {order_state['delivery_time']}\nProdotti: {order_state['order_items']}"
+        # Contesto dinamico
+        order_context = f"\n\nOrdine finora:\nCliente: {order_state['customer_name']}\nConsegna: {order_state['delivery_time']}\nProdotti: {order_state['order_items']}"
 
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT + INSTRUCTIONS + order_context}
@@ -51,7 +52,7 @@ def chat():
 
         raw_reply = response.choices[0].message["content"]
 
-        # Fallback JSON extraction
+        # Parsing JSON
         try:
             start = raw_reply.find("{")
             end = raw_reply.rfind("}") + 1
@@ -66,10 +67,8 @@ def chat():
         # Stato aggiornato
         if parsed.get("customer_name"):
             order_state["customer_name"] = parsed["customer_name"]
-
         if parsed.get("delivery_time"):
             order_state["delivery_time"] = parsed["delivery_time"]
-
         if parsed.get("order_items"):
             order_state["order_items"] += parsed["order_items"]
 
