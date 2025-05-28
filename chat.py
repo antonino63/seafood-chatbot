@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
 import os
-from clients import load_clients, find_client
 
 app = Flask(__name__)
 CORS(app)
@@ -19,25 +18,15 @@ I dati obbligatori sono:
 
 Non proporre prodotti.
 Non completare l'ordine se manca uno di questi tre dati.
-Riepiloga con chiarezza solo quando hai tutti i dati necessari.
-Se riconosci il ristorante, puoi arricchire la risposta con le informazioni note (es. preferenze o indirizzo)."""
-
-clients_data = load_clients()
+Riepiloga con chiarezza solo quando hai tutti i dati necessari."""
 
 @app.route("/chat", methods=["POST"])
 def chat():
     user_message = request.json.get("message", "")
 
-    client_info = find_client(user_message, clients_data)
-
-    if client_info:
-        extra_note = f"✅ Cliente riconosciuto: {client_info}"
-    else:
-        extra_note = "⚠️ Il cliente non è registrato. Verrà contattato dalla direzione per conferma."
-
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"{extra_note}\n{user_message}"}
+        {"role": "user", "content": user_message}
     ]
 
     try:
