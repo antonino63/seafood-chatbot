@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
 import os
-import re
 
 app = Flask(__name__)
 CORS(app)
@@ -39,15 +38,21 @@ FEW_SHOTS = [
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    user_message = request.json.get("message", "")
+    json_data = request.get_json()
+    user_message = json_data.get("message")
+    conversation = json_data.get("messages")
 
     detected_client = None
+    input_text = user_message or (conversation[-1]["content"] if conversation else "")
     for name in KNOWN_CLIENTS:
-        if name in user_message.upper():
+        if name in input_text.upper():
             detected_client = name
             break
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + FEW_SHOTS + [{"role": "user", "content": user_message}]
+    if conversation:
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}] + conversation
+    else:
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}] + FEW_SHOTS + [{"role": "user", "content": user_message}]
 
     try:
         response = openai.ChatCompletion.create(
