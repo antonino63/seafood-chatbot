@@ -9,6 +9,7 @@
         .message { margin: 10px 0; }
         .user { text-align: right; color: blue; }
         .bot { text-align: left; color: green; }
+        #clienteBox { margin-top: 10px; font-weight: bold; color: darkred; }
     </style>
 </head>
 <body>
@@ -16,6 +17,7 @@
         <div id="messages"></div>
         <input type="text" id="userInput" placeholder="Scrivi un ordine..." style="width: 80%;">
         <button onclick="sendMessage()">Invia</button>
+        <div id="clienteBox"></div>
     </div>
     <script>
         async function sendMessage() {
@@ -35,6 +37,11 @@
 
             const data = await response.json();
             messagesDiv.innerHTML += `<div class='message bot'>${data.reply}</div>`;
+            if (data.cliente) {
+                document.getElementById("clienteBox").textContent = `Cliente rilevato: ${data.cliente}`;
+            } else {
+                document.getElementById("clienteBox").textContent = "";
+            }
         }
     </script>
 </body>

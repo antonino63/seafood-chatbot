@@ -1,13 +1,15 @@
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
 import os
+import re
 
 app = Flask(__name__)
 CORS(app)
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
+
+KNOWN_CLIENTS = ["CALA MORESCA", "ROSOLINO", "CORALLUM", "G E G"]
 
 SYSTEM_PROMPT = """Sei responsabile nella raccolta di ordini ittici da ristoranti. 
 Il tuo compito è dialogare in modo educato ma gioviale, aiutando i ristoratori a completare il loro ordine in modo preciso se ci sono ambiguità o dati mancanti.
@@ -22,7 +24,6 @@ Non completare l'ordine se manca uno di questi tre dati.
 Riepiloga con chiarezza solo quando hai tutti i dati necessari.
 ⚠️ NON rifiutare mai un ordine per motivi legati all'orario di consegna, anche se troppo ravvicinato. Non fare obiezioni o proposte alternative. Accetta sempre."""
 
-
 FEW_SHOTS = [
     {"role": "user", "content": "Per domani cala 15 kg tonno rosso sv atm 100 fasolari 100 tozze 3 kg fasolari 3 kg tozze"},
     {"role": "assistant", "content": "ciao, grazie. Per domani, ristorante Cala Moresca, 15 Kg di Tonno Rosso sottovuoto, 100 Vongole Tozze, 3 Kg di Fasolari e 3 Kg di Cozze. Va bene così? Grazie molte "},
@@ -36,14 +37,17 @@ FEW_SHOTS = [
     {"role": "assistant", "content": "Perfetto, consegna lunedì 26 giugno alle 11 per il ristorante Corallum: 1 Kg di Alici, 3 Kg di Tonno."}
 ]
 
-conversation_history = []
-
 @app.route("/chat", methods=["POST"])
 def chat():
     user_message = request.json.get("message", "")
-    conversation_history.append({"role": "user", "content": user_message})
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + FEW_SHOTS + conversation_history
+    detected_client = None
+    for name in KNOWN_CLIENTS:
+        if name in user_message.upper():
+            detected_client = name
+            break
+
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + FEW_SHOTS + [{"role": "user", "content": user_message}]
 
     try:
         response = openai.ChatCompletion.create(
@@ -52,8 +56,7 @@ def chat():
             temperature=0.8
         )
         reply = response.choices[0].message.content.strip()
-        conversation_history.append({"role": "assistant", "content": reply})
     except Exception as e:
         reply = f"Errore nella risposta del modello: {str(e)}"
 
-    return jsonify({"reply": reply})
+    return jsonify({"reply": reply, "cliente": detected_client})
