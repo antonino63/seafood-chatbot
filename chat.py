@@ -1,163 +1,55 @@
 import os
-import json
-from flask import Blueprint, request, jsonify
 import openai
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
-chat_bp = Blueprint("chat", __name__)
+app = Flask(__name__)
+CORS(app)
+
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-with open("system_prompt.txt", "r", encoding="utf-8") as f:
-    SYSTEM_PROMPT = f.read()
+SYSTEM_PROMPT = """
+Sei responsabile nella raccolta di ordini ittici da ristoranti.
+Il tuo compito è dialogare in modo educato ma gioviale, aiutando i ristoratori a completare il loro ordine in modo preciso se ci sono ambiguità o dati mancanti.
 
-INSTRUCTIONS = (
-    """
-✨ Sei un assistente chatbot per ristoratori che ordinano prodotti ittici.
-Obiettivo:
-1. Estrai il nome del cliente (ristorante o referente)
-2. Estrai l'elenco dei prodotti ordinati con quantità (solo numeri)
-3. Estrai giorno e orario desiderato per la consegna
+I dati obbligatori sono:
+1. Nome del ristorante o referente
+2. Elenco dei prodotti ordinati, ciascuno con una quantità numerica
+3. Indicazioni sul quando consegnare (giorno e/o orario)
 
-Comportamento:
-- Non proporre prodotti. Non confermare se mancano dati obbligatori.
-- Rispondi sempre con un tono cortese e chiaro.
-- Quando tutti i dati sono presenti, riepiloga e saluta.
-
-Esempi:
-{
-  "customer_name": "Donato",
-  "order_items": [
-    {"product": "spigole", "quantity": 2}
-  ],
-  "delivery_time": "domani alle 10",
-  "message": "Perfetto, ho segnato 2 kg di spigole per domani alle 10 a nome di Donato. Grazie!"
-}
-{
-  "customer_name": "Bersagliera",
-  "order_items": [
-    {"product": "triglie genovesi", "quantity": 100},
-    {"product": "astici congelati", "quantity": 2},
-    {"product": "cozze di Napoli", "quantity": 1}
-  ],
-  "delivery_time": "sabato prima di pranzo",
-  "message": "Perfetto, ho segnato l'ordine per Bersagliera per sabato prima di pranzo. Grazie!"
-}
-{
-  "customer_name": "Caracol",
-  "order_items": [
-    {"product": "lupini", "quantity": 5}
-  ],
-  "delivery_time": "domani",
-  "message": "Ho preso nota di 5 kg di lupini per domani a nome Caracol."
-}
-{
-  "customer_name": "Rosolino",
-  "order_items": [
-    {"product": "alici senza testa", "quantity": 1},
-    {"product": "calamaretti", "quantity": 2},
-    {"product": "spigoloni", "quantity": 5}
-  ],
-  "delivery_time": "domani",
-  "message": "Ordine ricevuto per Rosolino."
-}
-{
-  "customer_name": "Fenestella",
-  "order_items": [
-    {"product": "misto", "quantity": 5},
-    {"product": "vongole", "quantity": 5},
-    {"product": "astici", "quantity": 5},
-    {"product": "taratufi", "quantity": 3},
-    {"product": "tonno", "quantity": 1},
-    {"product": "cozze", "quantity": 20}
-  ],
-  "delivery_time": "domani",
-  "message": "Grazie Davide. L'ordine è confermato per domani."
-}
-
-⚠️ Rispondi solo con un JSON strutturato come sopra, senza testo esterno.
+Non proporre prodotti.
+Non completare l'ordine se manca uno di questi tre dati.
+Riepiloga con chiarezza solo quando hai tutti i dati necessari.
+Rimani disponibile per successive modifiche o integrazioni.
 """
-)
 
-RECAP_KEYWORDS = ["riepilogo", "cosa ho ordinato", "mi ripeti l'ordine", "riassunto"]
-
-@chat_bp.route("/chat", methods=["POST"])
+@app.route('/chat', methods=['POST'])
 def chat():
+    data = request.get_json()
+    message = data.get('message')
+    history = data.get('history', [])
+    order_state = data.get('order_state', {})
+
+    conversation = [{'role': 'system', 'content': SYSTEM_PROMPT}]
+    conversation += history
+    conversation.append({'role': 'user', 'content': message})
+
     try:
-        data = request.get_json()
-        message = data.get("message", "").lower()
-        history = data.get("history", [])
-        order_state = data.get("order_state", {
-            "customer_name": None,
-            "delivery_time": None,
-            "order_items": []
-        })
-
-        if any(kw in message for kw in RECAP_KEYWORDS):
-            recap = f"Riepilogo ordine:\nCliente: {order_state['customer_name']}\nConsegna: {order_state['delivery_time']}\nProdotti: "
-            if not order_state["order_items"]:
-                recap += "nessun prodotto ancora inserito."
-            else:
-                recap += ", ".join(f"{item['quantity']} {item['product']}" for item in order_state["order_items"])
-            return jsonify({
-                "response_text": recap,
-                "order_complete": False,
-                "order_state": order_state,
-                "history": history
-            })
-
-        order_context = f"\n\nOrdine finora:\nCliente: {order_state['customer_name']}\nConsegna: {order_state['delivery_time']}\nProdotti: {order_state['order_items']}"
-
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT + INSTRUCTIONS + order_context}
-        ] + history + [
-            {"role": "user", "content": message}
-        ]
-
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            temperature=0.6
+            model="gpt-4",
+            messages=conversation,
+            temperature=1.0,
+            max_tokens=1024,
+            n=1
         )
-
-        raw_reply = response.choices[0].message["content"]
-
-        try:
-            start = raw_reply.find("{")
-            end = raw_reply.rfind("}") + 1
-            json_part = raw_reply[start:end]
-            parsed = json.loads(json_part)
-        except Exception:
-            return jsonify({
-                "response_text": raw_reply.strip() or "[nessuna risposta]",
-                "raw": raw_reply,
-                "error": "Risposta non JSON, fallback attivato"
-            }), 200
-
-        if parsed.get("customer_name"):
-            order_state["customer_name"] = parsed["customer_name"]
-        if parsed.get("delivery_time"):
-            order_state["delivery_time"] = parsed["delivery_time"]
-        if parsed.get("order_items"):
-            order_state["order_items"] += parsed["order_items"]
-
-        order_complete = all([
-            order_state.get("customer_name"),
-            order_state.get("delivery_time"),
-            order_state.get("order_items")
-        ])
+        reply = response.choices[0].message['content']
+        history.append({'role': 'user', 'content': message})
+        history.append({'role': 'assistant', 'content': reply})
 
         return jsonify({
-            "response_text": parsed.get("message", "[nessuna risposta]"),
-            "order_complete": order_complete,
-            "customer_name": order_state.get("customer_name"),
-            "delivery_time": order_state.get("delivery_time"),
-            "order_items": order_state.get("order_items", []),
-            "order_state": order_state,
-            "history": messages + [{"role": "assistant", "content": raw_reply}]
+            'response_text': reply,
+            'history': history,
+            'order_state': order_state
         })
-
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@chat_bp.route("/debug-prompt", methods=["GET"])
-def debug_prompt():
-    return jsonify({"system_prompt": SYSTEM_PROMPT[:500] + "..."})
+        return jsonify({'error': str(e)}), 500

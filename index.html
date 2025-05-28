@@ -1,0 +1,57 @@
+INDEX_HTML = '''
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Chatbot Prodotti Ittici</title>
+    <style>
+        body { font-family: Arial; background-color: #f4f4f4; padding: 20px; }
+        #chatbox { width: 100%; max-width: 600px; margin: auto; background: #fff; padding: 10px; border-radius: 10px; box-shadow: 0 0 10px #ccc; }
+        .message { margin: 10px 0; }
+        .user { text-align: right; color: blue; }
+        .bot { text-align: left; color: green; }
+    </style>
+</head>
+<body>
+    <div id="chatbox">
+        <div id="messages"></div>
+        <input type="text" id="userInput" placeholder="Scrivi un ordine..." style="width: 80%;">
+        <button onclick="sendMessage()">Invia</button>
+    </div>
+    <script>
+        let sessionId = Date.now();
+        let history = [];
+        let orderState = {};
+
+        function addMessage(text, sender) {
+            const div = document.createElement('div');
+            div.className = 'message ' + sender;
+            div.textContent = text;
+            document.getElementById('messages').appendChild(div);
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            if (!message) return;
+            addMessage(message, 'user');
+            input.value = '';
+
+            fetch('https://seafood-chatbot.onrender.com/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message, history, order_state: orderState })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) throw new Error(data.error);
+                addMessage(data.response_text, 'bot');
+                history = data.history || [];
+                orderState = data.order_state || {};
+            })
+            .catch(err => addMessage('Errore tecnico: ' + err.message, 'bot'));
+        }
+    </script>
+</body>
+</html>
+'''
