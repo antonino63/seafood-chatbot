@@ -1,3 +1,4 @@
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
@@ -33,11 +34,14 @@ FEW_SHOTS = [
     {"role": "assistant", "content": "Perfetto, consegna lunedì 26 giugno alle 11 per il ristorante Corallum: 1 Kg di Alici, 3 Kg di Tonno."}
 ]
 
+conversation_history = []
+
 @app.route("/chat", methods=["POST"])
 def chat():
     user_message = request.json.get("message", "")
+    conversation_history.append({"role": "user", "content": user_message})
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + FEW_SHOTS + [{"role": "user", "content": user_message}]
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + FEW_SHOTS + conversation_history
 
     try:
         response = openai.ChatCompletion.create(
@@ -46,6 +50,7 @@ def chat():
             temperature=0.8
         )
         reply = response.choices[0].message.content.strip()
+        conversation_history.append({"role": "assistant", "content": reply})
     except Exception as e:
         reply = f"Errore nella risposta del modello: {str(e)}"
 
