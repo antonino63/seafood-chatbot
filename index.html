@@ -20,36 +20,6 @@
     <script>
         let sessionId = Date.now();
         let history = [];
-        let orderState = {};
-
-        function addMessage(text, sender) {
-            const div = document.createElement('div');
-            div.className = 'message ' + sender;
-            div.textContent = text;
-            document.getElementById('messages').appendChild(div);
-        }
-
-        function sendMessage() {
-            const input = document.getElementById('userInput');
-            const message = input.value.trim();
-            if (!message) return;
-            addMessage(message, 'user');
-            input.value = '';
-
-            fetch('https://seafood-chatbot.onrender.com/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message, history, order_state: orderState })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.error) throw new Error(data.error);
-                addMessage(data.response_text, 'bot');
-                history = data.history || [];
-                orderState = data.order_state || {};
-            })
-            .catch(err => addMessage('Errore tecnico: ' + err.message, 'bot'));
-        }
     </script>
 </body>
 </html>
