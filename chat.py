@@ -77,17 +77,32 @@ Esempi:
 """
 )
 
+RECAP_KEYWORDS = ["riepilogo", "cosa ho ordinato", "mi ripeti l'ordine", "riassunto"]
+
 @chat_bp.route("/chat", methods=["POST"])
 def chat():
     try:
         data = request.get_json()
-        message = data.get("message", "")
+        message = data.get("message", "").lower()
         history = data.get("history", [])
         order_state = data.get("order_state", {
             "customer_name": None,
             "delivery_time": None,
             "order_items": []
         })
+
+        if any(kw in message for kw in RECAP_KEYWORDS):
+            recap = f"Riepilogo ordine:\nCliente: {order_state['customer_name']}\nConsegna: {order_state['delivery_time']}\nProdotti: "
+            if not order_state["order_items"]:
+                recap += "nessun prodotto ancora inserito."
+            else:
+                recap += ", ".join(f"{item['quantity']} {item['product']}" for item in order_state["order_items"])
+            return jsonify({
+                "response_text": recap,
+                "order_complete": False,
+                "order_state": order_state,
+                "history": history
+            })
 
         order_context = f"\n\nOrdine finora:\nCliente: {order_state['customer_name']}\nConsegna: {order_state['delivery_time']}\nProdotti: {order_state['order_items']}"
 
