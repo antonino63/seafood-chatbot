@@ -19,7 +19,9 @@ I dati obbligatori sono:
 
 Non proporre prodotti.
 Non completare l'ordine se manca uno di questi tre dati.
-Riepiloga con chiarezza solo quando hai tutti i dati necessari."""
+Riepiloga con chiarezza solo quando hai tutti i dati necessari.
+⚠️ NON rifiutare mai un ordine per motivi legati all'orario di consegna, anche se troppo ravvicinato. Non fare obiezioni o proposte alternative. Accetta sempre."""
+
 
 FEW_SHOTS = [
     {"role": "user", "content": "Per domani cala 15 kg tonno rosso sv atm 100 fasolari 100 tozze 3 kg fasolari 3 kg tozze"},
